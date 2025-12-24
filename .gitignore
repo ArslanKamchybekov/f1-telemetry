@@ -1,0 +1,109 @@
+# Build artifacts
+*.o
+*.obj
+*.exe
+*.out
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+f1-telemetry
+f1_telemetry
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Build directories
+build/
+Build/
+bin/
+Bin/
+lib/
+Lib/
+obj/
+Obj/
+out/
+Out/
+
+# IDE - Visual Studio Code
+.vscode/
+*.code-workspace
+
+# IDE - CLion
+.idea/
+cmake-build-*/
+
+# IDE - Xcode
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+
+# IDE - Visual Studio
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+
+# IDE - Qt Creator
+*.pro.user
+*.pro.user.*
+
+# Compiler
+*.pch
+*.su
+*.idb
+*.pdb
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# OS - macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# OS - Linux
+*~
+.directory
+.Trash-*
+
+# OS - Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.swp
+*.swo
+*~
+.#*
+
+# Coverage reports
+*.gcov
+*.gcda
+*.gcno
+coverage/
+*.info
+
+# Valgrind
+valgrind-out.*
+
+# Core dumps
+core
+core.*
+

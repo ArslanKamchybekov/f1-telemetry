@@ -20,7 +20,7 @@ The system uses a producer-consumer architecture with a thread-safe ring buffer:
 ┌─────────────────┐         ┌──────────────┐         ┌─────────────────┐
 │ Telemetry       │         │   Ring       │         │   Consumer      │
 │ Generator       │────────▶│   Buffer     │────────▶│   Thread        │
-│ (Producer)      │         │  (1024 cap) │         │   (Display)     │
+│ (Producer)      │         │  (1024 cap)  │         │   (Display)     │
 └─────────────────┘         └──────────────┘         └─────────────────┘
 ```
 
@@ -145,8 +145,4 @@ Potential improvements:
 - [ ] Safety car deployment
 - [ ] Multi-track support
 - [ ] Real-time visualization
-
-## License
-
-This project is provided as-is for educational and demonstration purposes.
 

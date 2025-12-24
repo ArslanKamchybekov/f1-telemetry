@@ -20,14 +20,7 @@ private:
 
     uint64_t current_time_ns_; // simulation time
 
-    struct DriverSimState {
-        uint32_t lap;
-        uint8_t sector;
-        float tire_wear;
-        float distance_in_lap;
-    };
-
-    vector<DriverSimState> states_;
+    vector<DriverState> states_;
 
     TelemetryFrame generateFrame(uint32_t driver_id);
 

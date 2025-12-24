@@ -51,3 +51,14 @@ struct TrackProfile {
     float overtaking_difficulty;     // affects traffic loss
     float safety_car_probability;    // per lap
 };
+
+struct DriverState {
+    uint32_t lap;
+    uint8_t sector;
+    float tire_wear;
+    float distance_in_lap;
+
+    bool is_on_pit;
+    uint64_t pit_stop_start_time_ns;
+    uint64_t pit_stop_end_time_ns;
+};

@@ -11,6 +11,7 @@ public:
     TelemetryGenerator(const TrackProfile& track, const vector<DriverProfile>& drivers, const vector<CarProfile>& cars, uint32_t total_laps);
 
     vector<TelemetryFrame> next();
+    bool isRaceFinished() const;
 
 private:
     TrackProfile track_;

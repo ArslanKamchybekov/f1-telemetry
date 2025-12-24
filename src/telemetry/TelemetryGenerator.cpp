@@ -16,6 +16,9 @@ TelemetryGenerator::TelemetryGenerator(
         s.sector = 0;
         s.tire_wear = 0.0f;
         s.distance_in_lap = 0.0f;
+        s.is_on_pit = false;
+        s.pit_stop_start_time_ns = 0;
+        s.pit_stop_end_time_ns = 0;
     }
 }
 
@@ -60,33 +63,43 @@ TelemetryFrame TelemetryGenerator::generateFrame(uint32_t i) {
     const auto& driver = drivers_[i];
     const auto& car = cars_[i];
 
-    // base speed model
-    float speed =
-        220.0f
-        * car.engine_power
-        * (1.0f - state.tire_wear * 0.4f);
+    float pit_threshold = 0.7f + (driver.tire_management * 0.2f);
 
-    // tire wear update
-    state.tire_wear +=
-        0.0005f
-        * track_.tire_wear_factor
-        * driver.aggression;
+    if (state.tire_wear > pit_threshold && !state.is_on_pit) {
+        state.is_on_pit = true;
+        state.pit_stop_start_time_ns = current_time_ns_;
+        state.pit_stop_end_time_ns = current_time_ns_ + 23 * 1e9; // 23 seconds
+    }
 
-    if (state.tire_wear > 1.0f)
-        state.tire_wear = 1.0f;
+    if (state.is_on_pit && current_time_ns_ >= state.pit_stop_end_time_ns) {
+        state.is_on_pit = false;
+        state.tire_wear = 0.0f;
+    }
 
-    // distance update
-    state.distance_in_lap += speed * 0.005f; // scaled
 
-    // sector progression
-    float sector_length = track_.lap_length_km / track_.sectors;
-    if (state.distance_in_lap >= sector_length) {
-        state.distance_in_lap = state.distance_in_lap - sector_length;
-        state.sector++;
+    float speed = 0.0f;
+    if (!state.is_on_pit) {
+        speed = 220.0f * car.engine_power * (1.0f - state.tire_wear * 0.4f);
+    }
 
-        if (state.sector > track_.sectors) {
-            state.sector = 1;
-            state.lap++;
+    if (!state.is_on_pit) {
+        state.tire_wear += 0.0005f * track_.tire_wear_factor * driver.aggression;
+        if (state.tire_wear > 1.0f) state.tire_wear = 1.0f;
+    }
+
+    if (!state.is_on_pit) {
+        state.distance_in_lap += speed * 0.005f;
+
+        float sector_length = track_.lap_length_km / track_.sectors;
+
+        if (state.distance_in_lap >= sector_length) {
+            state.distance_in_lap = state.distance_in_lap - sector_length;
+            state.sector++;
+
+            if (state.sector > track_.sectors) {
+                state.sector = 1;
+                state.lap++;
+            }
         }
     }
 
@@ -101,4 +114,13 @@ TelemetryFrame TelemetryGenerator::generateFrame(uint32_t i) {
     frame.tire_wear = state.tire_wear;
 
     return frame;
+}
+
+bool TelemetryGenerator::isRaceFinished() const {
+    for(const auto& state : states_) {
+        if(state.lap >= total_laps_) {
+            return true;
+        }
+    }
+    return false;
 }

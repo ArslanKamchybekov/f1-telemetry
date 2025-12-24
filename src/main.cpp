@@ -21,7 +21,7 @@ int main(){
         .track_id = 1,
         .sectors = 3,
         .lap_length_km = 10.0f,
-        .tire_wear_factor = 0.0005f,
+        .tire_wear_factor = 10.0f,
         .overtaking_difficulty = 0.1f,
         .safety_car_probability = 0.01f,
     };
@@ -41,7 +41,7 @@ int main(){
         // Ferrari - High power, good aero, moderate cooling, moderate reliability
         {.car_id = "Ferrari", .engine_power = 0.98f, .aero_efficiency = 0.92f, .cooling_efficiency = 0.80f, .reliability = 0.85f},
     };
-    uint32_t total_laps = 10;
+    uint32_t total_laps = 50;
 
     RingBuffer<TelemetryFrame> buffer(1024);
     TelemetryGenerator generator(track, drivers, cars, total_laps);
@@ -49,6 +49,15 @@ int main(){
     thread producer([&]() {
         while(!done.load()){
             auto frames = generator.next();
+
+            if(generator.isRaceFinished()) {
+                done.store(true);
+                cout << "\n🏁 RACE FINISHED! 🏁\n";
+                cout << "Winner: " << drivers[0].driver_id << "\n";
+
+                break;
+            }
+
             for(const auto &frame : frames){
                 if(!buffer.push(frame)){
                     TelemetryFrame old_frame;
@@ -65,17 +74,18 @@ int main(){
         TelemetryFrame frame;
         while(!done.load()){
             if(buffer.pop(frame)){
-                cout
-                << "[Telemetry] "
+                cout << "[Telemetry] "
                 << "P" << int(frame.race_position) << " "
                 << drivers[frame.driver_id].driver_id
-                << " Lap "
-                << frame.lap
-                << " Sector "
-                << int(frame.sector)
-                << " Speed "
-                << frame.speed_kph
-                << "\n";
+                << " Lap " << frame.lap
+                << " Sector "<< int(frame.sector)
+                << " Speed "<< frame.speed_kph;
+
+                if (frame.speed_kph == 0.0f && frame.lap > 0) {
+                    cout << " [IN PITS]";
+                } 
+
+                cout << " Tire: " << (frame.tire_wear * 100) << "%" << "\n";
             } else {
                 this_thread::sleep_for(chrono::milliseconds(1)); // to sleep the thread to avoid busy-waiting
             }

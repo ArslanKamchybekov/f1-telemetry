@@ -3,13 +3,9 @@
 #include <thread>
 #include <chrono>
 #include <iostream>
-#include <fstream>
-#include <iomanip>
-#include <sstream>
 #include <vector>
 #include <atomic>
-#include <mutex>
-#include <atomic>
+#include <algorithm>
 
 using namespace std;
 

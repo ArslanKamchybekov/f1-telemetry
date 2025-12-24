@@ -5,11 +5,13 @@ A high-performance, multi-threaded Formula 1 telemetry data generator and proces
 ## Features
 
 - **Real-time Telemetry Generation**: Simulates F1 race data at 50Hz (20ms intervals)
-- **Multi-threaded Architecture**: Producer-consumer pattern with lock-free ring buffer for efficient data flow
+- **Beautiful Terminal Display**: Color-coded live leaderboard with emojis, progress bars, and real-time stats
+- **Multi-threaded Architecture**: Producer-consumer pattern with thread-safe ring buffer for efficient data flow
 - **Realistic Driver Profiles**: Models driver behavior including aggression, consistency, tire management, and risk tolerance
 - **Car Performance Simulation**: Simulates engine power, aerodynamic efficiency, cooling, and reliability
 - **Dynamic Race Positions**: Real-time position calculation based on total distance traveled
 - **Tire Wear Modeling**: Progressive tire degradation based on driver aggression and track characteristics
+- **Pit Stop Simulation**: Automatic pit stops when tire wear exceeds threshold
 - **Track Configuration**: Configurable track profiles with sectors, lap length, and environmental factors
 
 ## Architecture
@@ -56,12 +58,23 @@ clang++ -std=c++17 -I src src/main.cpp src/telemetry/TelemetryGenerator.cpp -o f
    ./f1-telemetry
    ```
 
-2. **View telemetry output**: The consumer thread will display real-time telemetry data:
+2. **View the live race**: The terminal displays a beautiful, color-coded leaderboard:
    ```
-   [Telemetry] P1 Max Verstappen Lap 2 Sector 1 Speed 209.5
-   [Telemetry] P2 Lewis Hamilton Lap 2 Sector 1 Speed 198.3
-   [Telemetry] P3 Charles Leclerc Lap 2 Sector 1 Speed 215.2
+   🏁 LAP 15/50 🏁
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   P1 🔴 Charles Leclerc      █████████░ Lap 15  Speed: 210 kph  Tire: 25%
+   P2 🔵 Max Verstappen       ████████░░ Lap 14  Speed: 205 kph  Tire: 32%  
+   P3 ⚪ Lewis Hamilton       ███████░░░ Lap 14  Speed: 198 kph  Tire: 28%
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ```
+
+   **Display Features:**
+   - Color-coded positions (Gold/Silver/Bronze for top 3)
+   - Team emojis (🔴 Ferrari, 🔵 Red Bull, ⚪ Mercedes)
+   - Progress bars showing sector completion
+   - Color-coded speed (green = fast, yellow = medium, red = slow)
+   - Color-coded tire wear (green = fresh, yellow = worn, red = critical)
+   - Purple "[IN PITS]" indicator during pit stops
 
 3. **Stop the simulation**: Press Enter to gracefully shutdown all threads
 
@@ -137,9 +150,11 @@ The default configuration includes three drivers with realistic profiles:
 ## Future Enhancements
 
 Potential improvements:
-- [ ] Pit stop simulation
+- [ ] Weather conditions
 - [ ] DRS (Drag Reduction System) modeling
 - [ ] Safety car deployment
 - [ ] Multi-track support
-- [ ] Real-time visualization
+- [ ] More drivers and teams
+- [ ] Qualifying sessions
+- [ ] Race incidents and DNFs
 

@@ -6,12 +6,14 @@ A high-performance, multi-threaded Formula 1 telemetry data generator and proces
 
 - **Real-time Telemetry Generation**: Simulates F1 race data at 50Hz (20ms intervals)
 - **Beautiful Terminal Display**: Color-coded live leaderboard with emojis, progress bars, and real-time stats
-- **Multi-threaded Architecture**: Producer-consumer pattern with thread-safe ring buffer for efficient data flow
+- **Multi-threaded Architecture**: Producer-consumer pattern with condition variables for efficient blocking
+- **2025 F1 Grid**: Full 20-driver lineup across 10 teams with realistic driver characteristics
 - **Realistic Driver Profiles**: Models driver behavior including aggression, consistency, tire management, and risk tolerance
 - **Car Performance Simulation**: Simulates engine power, aerodynamic efficiency, cooling, and reliability
 - **Dynamic Race Positions**: Real-time position calculation based on total distance traveled
 - **Tire Wear Modeling**: Progressive tire degradation based on driver aggression and track characteristics
-- **Pit Stop Simulation**: Automatic pit stops when tire wear exceeds threshold
+- **Advanced Pit Stop Strategy**: Variable pit stop thresholds based on driver tire management and risk tolerance
+- **Driver Skill Factor**: Consistency affects how much performance drivers can extract from their cars
 - **Track Configuration**: Configurable track profiles with sectors, lap length, and environmental factors
 
 ## Architecture
@@ -28,9 +30,9 @@ The system uses a producer-consumer architecture with a thread-safe ring buffer:
 
 ### Components
 
-- **TelemetryGenerator**: Generates telemetry frames for all drivers every 20ms, simulating speed, tire wear, sector progression, and race positions
-- **RingBuffer**: Thread-safe circular buffer for efficient data transfer between producer and consumer threads
-- **Main Application**: Orchestrates the producer and consumer threads, handles user input for graceful shutdown
+- **TelemetryGenerator**: Generates telemetry frames for all 20 drivers every 20ms, simulating speed, tire wear, sector progression, and race positions. Implements driver skill factors and variable pit stop strategies.
+- **RingBuffer**: Thread-safe circular buffer using condition variables (`std::condition_variable`) for efficient blocking instead of busy-waiting. Supports graceful shutdown mechanism.
+- **Main Application**: Orchestrates the producer and consumer threads, handles user input for graceful shutdown, and displays real-time race leaderboard
 
 ## Building
 
@@ -70,11 +72,14 @@ clang++ -std=c++17 -I src src/main.cpp src/telemetry/TelemetryGenerator.cpp -o f
 
    **Display Features:**
    - Color-coded positions (Gold/Silver/Bronze for top 3)
-   - Team emojis (🔴 Ferrari, 🔵 Red Bull, ⚪ Mercedes)
-   - Progress bars showing sector completion
+   - Team emojis for all 10 teams:
+     - 🔴 Ferrari, 🔵 Red Bull, ⚪ Mercedes, 🟠 McLaren
+     - 🟢 Aston Martin, 💙 Alpine/Williams, ⚫ Racing Bulls/Kick Sauber
+   - Progress bars showing sector completion within current lap
    - Color-coded speed (green = fast, yellow = medium, red = slow)
    - Color-coded tire wear (green = fresh, yellow = worn, red = critical)
    - Purple "[IN PITS]" indicator during pit stops
+   - Real-time updates showing all 20 drivers
 
 3. **Stop the simulation**: Press Enter to gracefully shutdown all threads
 
@@ -127,34 +132,85 @@ Defines track characteristics:
 
 ## Example Configuration
 
-The default configuration includes three drivers with realistic profiles:
+The default configuration includes the full 2025 F1 grid with 20 drivers across 10 teams:
 
-- **Max Verstappen** (Red Bull): High aggression (0.85), excellent consistency (0.90), good tire management (0.80)
-- **Lewis Hamilton** (Mercedes): Balanced aggression (0.65), exceptional consistency (0.95), excellent tire management (0.95)
-- **Charles Leclerc** (Ferrari): Very aggressive (0.90), moderate consistency (0.75), moderate tire management (0.70)
+**Top Teams:**
+- **Max Verstappen** (Red Bull): High aggression (0.88), exceptional consistency (0.98), excellent tire management (0.88)
+- **Charles Leclerc** (Ferrari): Very aggressive (0.94), high consistency (0.96), good tire management (0.85)
+- **Lando Norris** (McLaren): High aggression (0.82), excellent consistency (0.94), good tire management (0.86)
+- **Oscar Piastri** (McLaren): Moderate aggression (0.74), excellent consistency (0.90), good tire management (0.84)
+
+**Notable Situations:**
+- **Lewis Hamilton** (Ferrari): Struggling with adaptation - reduced consistency (0.72) and tire management (0.78)
+- **Yuki Tsunoda** (Red Bull): Rookie at top team - low consistency (0.58) and tire management (0.58)
 
 ## Technical Details
 
-### Thread Safety
-- Ring buffer uses mutex-based synchronization for thread-safe push/pop operations
-- Atomic boolean flag for graceful shutdown coordination
-- Producer thread generates data at fixed 20ms intervals
-- Consumer thread processes data with minimal latency
+### Thread Safety & Synchronization
+- **Condition Variables**: Ring buffer uses `std::condition_variable` for efficient blocking
+  - `cv_not_full_`: Producer waits when buffer is full (instead of busy-waiting)
+  - `cv_not_empty_`: Consumer waits when buffer is empty (instead of busy-waiting)
+  - Eliminates CPU spinning and reduces power consumption
+- **Mutex Protection**: `std::mutex` with `std::unique_lock` for thread-safe operations
+- **Graceful Shutdown**: `shutdown()` method notifies all waiting threads and prevents new operations
+- **Atomic Flags**: Used for race finish detection and thread coordination
 
 ### Performance
 - Ring buffer capacity: 1024 frames (configurable)
 - Update rate: 50Hz (20ms per frame)
-- Backpressure handling: Drops oldest frame when buffer is full
+- Zero busy-waiting: Condition variables ensure threads sleep when waiting
 - Low-latency design: Minimal blocking between producer and consumer
+- Efficient wake-up: Only one thread notified per operation (`notify_one()`)
+
+### Advanced Simulation Features
+- **Driver Skill Factor**: Speed calculation includes `driver_skill = 0.80 + consistency * 0.25`, meaning consistent drivers extract more performance
+- **Variable Pit Stop Thresholds**: Range from 65-90% tire wear based on:
+  - Base: `0.65 + (tire_management * 0.25)`
+  - Risk adjustment: `±7.5%` based on risk tolerance
+- **Variable Pit Stop Duration**: 2-3 seconds based on car reliability
+- **Position Calculation**: Real-time sorting by total distance (lap distance + distance in current lap)
+
+## Implementation Highlights
+
+### Condition Variables
+The ring buffer implementation uses condition variables to eliminate busy-waiting:
+
+```cpp
+// Producer waits efficiently when buffer is full
+cv_not_full_.wait(lock, [this]() {
+    return next_head != tail_ || shutdown_;
+});
+
+// Consumer waits efficiently when buffer is empty
+cv_not_empty_.wait(lock, [this]() { 
+    return head_ != tail_ || shutdown_;
+});
+```
+
+This ensures threads sleep when waiting, reducing CPU usage and improving system efficiency.
+
+### Driver Performance Model
+Driver consistency directly impacts speed:
+- High consistency (0.95+): Can extract 100%+ of car performance
+- Low consistency (0.60): Only extracts ~80% of car performance
+- This creates realistic performance gaps between drivers
+
+### Pit Stop Strategy
+Each driver has a unique pit stop threshold:
+- Tire management experts (0.95): Pit at ~90% wear
+- Rookies (0.58): Pit at ~70% wear (more cautious)
+- Risk-takers: Pit slightly earlier, conservative drivers later
 
 ## Future Enhancements
 
 Potential improvements:
-- [ ] Weather conditions
+- [ ] Weather conditions (rain, dry, mixed)
 - [ ] DRS (Drag Reduction System) modeling
 - [ ] Safety car deployment
-- [ ] Multi-track support
-- [ ] More drivers and teams
-- [ ] Qualifying sessions
-- [ ] Race incidents and DNFs
+- [ ] Virtual Safety Car (VSC)
+- [ ] Multi-track support with track-specific characteristics
+- [ ] Qualifying sessions with grid positions
+- [ ] Race incidents and DNFs (crashes, mechanical failures)
+- [ ] Strategy variations (one-stop vs two-stop races)
+- [ ] Yellow flag periods affecting speed
 

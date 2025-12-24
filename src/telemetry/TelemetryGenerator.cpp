@@ -9,7 +9,7 @@ TelemetryGenerator::TelemetryGenerator(
     const vector<CarProfile>& cars,
     uint32_t total_laps
 ) : track_(track), drivers_(drivers), cars_(cars), total_laps_(total_laps), current_time_ns_(0) {
-    states_.resize(drivers.size()); // initialize driver states
+    states_.resize(drivers.size());
 
     for (auto &s : states_){
         s.lap = 0;
@@ -22,7 +22,6 @@ TelemetryGenerator::TelemetryGenerator(
     }
 }
 
-// Generate a single frame for a driver every 20ms
 vector<TelemetryFrame> TelemetryGenerator::next() {
     constexpr uint64_t tick_ns = 20 * 1e6;
     current_time_ns_ += tick_ns;
@@ -57,18 +56,20 @@ void TelemetryGenerator::calculatePositions(vector<TelemetryFrame>& frames) {
     }
 }
 
-// Generate a single frame for a driver
 TelemetryFrame TelemetryGenerator::generateFrame(uint32_t i) {
     auto& state = states_[i];
     const auto& driver = drivers_[i];
     const auto& car = cars_[i];
 
-    float pit_threshold = 0.7f + (driver.tire_management * 0.2f);
+    float base_threshold = 0.65f + (driver.tire_management * 0.25f);
+    float risk_adjustment = (driver.risk_tolerance - 0.5f) * 0.15f;
+    float pit_threshold = base_threshold + risk_adjustment;
 
     if (state.tire_wear > pit_threshold && !state.is_on_pit) {
         state.is_on_pit = true;
         state.pit_stop_start_time_ns = current_time_ns_;
-        state.pit_stop_end_time_ns = current_time_ns_ + 23 * 1e9; // 23 seconds
+        uint64_t pit_duration = (2.0f + (1.0f - car.reliability) * 1.0f) * 1e9;
+        state.pit_stop_end_time_ns = current_time_ns_ + pit_duration;
     }
 
     if (state.is_on_pit && current_time_ns_ >= state.pit_stop_end_time_ns) {
@@ -79,7 +80,8 @@ TelemetryFrame TelemetryGenerator::generateFrame(uint32_t i) {
 
     float speed = 0.0f;
     if (!state.is_on_pit) {
-        speed = 220.0f * car.engine_power * (1.0f - state.tire_wear * 0.4f);
+        float driver_skill = 0.80f + driver.consistency * 0.25f;
+        speed = 220.0f * car.engine_power * driver_skill * (1.0f - state.tire_wear * 0.4f);
     }
 
     if (!state.is_on_pit) {
@@ -117,10 +119,16 @@ TelemetryFrame TelemetryGenerator::generateFrame(uint32_t i) {
 }
 
 bool TelemetryGenerator::isRaceFinished() const {
-    for(const auto& state : states_) {
-        if(state.lap >= total_laps_) {
-            return true;
+    float max_distance = 0;
+    uint32_t leader_idx = 0;
+    
+    for(uint32_t i = 0; i < states_.size(); i++) {
+        float total_distance = states_[i].distance_in_lap + states_[i].lap * track_.lap_length_km;
+        if(total_distance > max_distance) {
+            max_distance = total_distance;
+            leader_idx = i;
         }
     }
-    return false;
+    
+    return states_[leader_idx].lap > total_laps_;
 }

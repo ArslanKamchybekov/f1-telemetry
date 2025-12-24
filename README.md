@@ -74,7 +74,7 @@ f1-telemetry/
 │   ├── common/
 │   │   └── types.h                 # Data structures (TelemetryFrame, DriverProfile, CarProfile, TrackProfile)
 │   ├── telemetry/
-│   │   ├── TelemetryGenerator.h   # Telemetry generation class interface
+│   │   ├── TelemetryGenerator.h    # Telemetry generation class interface
 │   │   └── TelemetryGenerator.cpp  # Telemetry generation implementation
 │   └── ingestion/
 │       └── RingBuffer.h            # Thread-safe ring buffer implementation
@@ -137,10 +137,7 @@ The default configuration includes three drivers with realistic profiles:
 ## Future Enhancements
 
 Potential improvements:
-- [ ] Network export (UDP/TCP telemetry streaming)
-- [ ] File logging (CSV/JSON output)
 - [ ] Pit stop simulation
-- [ ] Weather conditions
 - [ ] DRS (Drag Reduction System) modeling
 - [ ] Safety car deployment
 - [ ] Multi-track support

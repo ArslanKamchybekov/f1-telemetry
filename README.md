@@ -146,7 +146,3 @@ Potential improvements:
 - [ ] Multi-track support
 - [ ] Real-time visualization
 
-## License
-
-This project is provided as-is for educational and demonstration purposes.
-

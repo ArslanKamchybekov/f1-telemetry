@@ -65,7 +65,18 @@ TelemetryFrame TelemetryGenerator::generateFrame(uint32_t i) {
     float risk_adjustment = (driver.risk_tolerance - 0.5f) * 0.15f;
     float pit_threshold = base_threshold + risk_adjustment;
 
-    if (state.tire_wear > pit_threshold && !state.is_on_pit) {
+    bool should_pit = false;
+    // Check if this driver has an optimal strategy
+    if (optimal_strategies_.find(i) != optimal_strategies_.end()) {
+        // optimal strategy condition
+        uint32_t optimal_pit_lap = optimal_strategies_[i];
+        should_pit = state.lap == optimal_pit_lap && !state.is_on_pit;
+    } else {
+        //  tire wear condition
+        should_pit = state.tire_wear > pit_threshold && !state.is_on_pit;
+    }
+
+    if (should_pit && !state.is_on_pit) {
         state.is_on_pit = true;
         state.pit_stop_start_time_ns = current_time_ns_;
         uint64_t pit_duration = (2.0f + (1.0f - car.reliability) * 1.0f) * 1e9;
@@ -130,4 +141,8 @@ bool TelemetryGenerator::isRaceFinished() const {
     }
     
     return states_[leader_idx].lap > total_laps_;
+}
+
+void TelemetryGenerator::setOptimalStrategies(const std::map<uint32_t, uint32_t>& strategies) {
+    optimal_strategies_ = strategies;
 }

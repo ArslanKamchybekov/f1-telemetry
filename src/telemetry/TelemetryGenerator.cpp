@@ -77,7 +77,6 @@ TelemetryFrame TelemetryGenerator::generateFrame(uint32_t i) {
         state.tire_wear = 0.0f;
     }
 
-
     float speed = 0.0f;
     if (!state.is_on_pit) {
         float driver_skill = 0.80f + driver.consistency * 0.25f;

@@ -14,7 +14,7 @@ public:
         uint32_t total_laps
     );
 
-    float simulateRace(uint32_t driver_id, uint32_t pit_lap);
+    float simulateRace(uint32_t target_driver_id, uint32_t pit_lap);
 
 private:
     struct DriverSimState {
@@ -34,7 +34,7 @@ private:
 
     std::vector<DriverSimState> states_;
 
-    void simulateTick();
+    void simulateTick(uint32_t target_driver_id, uint32_t pit_lap);
     void updateDriverState(uint32_t driver_id, uint32_t target_driver_id, uint32_t forced_pit_lap);
     bool shouldPit(uint32_t driver_id, uint32_t target_driver_id, uint32_t forced_pit_lap);
 };

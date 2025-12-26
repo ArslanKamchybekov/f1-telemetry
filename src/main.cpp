@@ -181,7 +181,9 @@ int main(){
                     else if(f.race_position == 2) posColor = "\033[1;37m";
                     else if(f.race_position == 3) posColor = "\033[1;91m";
                     
-                    cout << posColor << "P" << int(f.race_position) << "\033[0m ";
+                    cout << posColor << "P" << int(f.race_position);
+                    if(f.race_position < 10) cout << " ";
+                    cout << "\033[0m ";
                     
                     string emoji = "⚫";
                     string teamName = cars[f.driver_id].car_id;

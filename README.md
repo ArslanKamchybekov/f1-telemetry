@@ -253,7 +253,6 @@ The `TrackLimitsMonitor` processes telemetry frames to detect track limits viola
 ## Future Enhancements
 
 Potential improvements:
-- [ ] Weather conditions (rain, dry, mixed)
 - [ ] DRS (Drag Reduction System) modeling
 - [ ] Safety car deployment
 - [ ] Virtual Safety Car (VSC)
@@ -262,4 +261,3 @@ Potential improvements:
 - [ ] Race incidents and DNFs (crashes, mechanical failures)
 - [ ] Strategy variations (one-stop vs two-stop races)
 - [ ] Yellow flag periods affecting speed
-

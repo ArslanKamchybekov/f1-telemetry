@@ -13,6 +13,8 @@ A high-performance, multi-threaded Formula 1 telemetry data generator and proces
 - **Dynamic Race Positions**: Real-time position calculation based on total distance traveled
 - **Tire Wear Modeling**: Progressive tire degradation based on driver aggression and track characteristics
 - **Advanced Pit Stop Strategy**: Variable pit stop thresholds based on driver tire management and risk tolerance
+- **Optimal Strategy Analysis (Optional)**: Find a best pit lap for selected drivers and apply it to the live race
+  - Uses parallel simulation via `std::async` + `std::future` to evaluate multiple candidate pit laps
 - **Driver Skill Factor**: Consistency affects how much performance drivers can extract from their cars
 - **Track Configuration**: Configurable track profiles with sectors, lap length, and environmental factors
 
@@ -32,7 +34,9 @@ The system uses a producer-consumer architecture with a thread-safe ring buffer:
 
 - **TelemetryGenerator**: Generates telemetry frames for all 20 drivers every 20ms, simulating speed, tire wear, sector progression, and race positions. Implements driver skill factors and variable pit stop strategies.
 - **RingBuffer**: Thread-safe circular buffer using condition variables (`std::condition_variable`) for efficient blocking instead of busy-waiting. Supports graceful shutdown mechanism.
-- **Main Application**: Orchestrates the producer and consumer threads, handles user input for graceful shutdown, and displays real-time race leaderboard
+- **StrategyAnalyzer**: Optional pre-race strategy module that searches for an optimal pit lap for selected drivers.
+- **RaceSimulator**: Lightweight race simulation used by the strategy analyzer to evaluate pit lap candidates.
+- **Main Application**: Orchestrates strategy analysis (optional) and the producer/consumer threads, and renders the live race leaderboard.
 
 ## Building
 
@@ -44,13 +48,23 @@ The system uses a producer-consumer architecture with a thread-safe ring buffer:
 ### Compilation
 
 ```bash
-g++ -std=c++17 -I src src/main.cpp src/telemetry/TelemetryGenerator.cpp -o f1-telemetry -pthread
+g++ -std=c++17 -I src \
+  src/main.cpp \
+  src/telemetry/TelemetryGenerator.cpp \
+  src/strategy/RaceSimulator.cpp \
+  src/strategy/StrategyAnalyzer.cpp \
+  -o f1-telemetry -pthread
 ```
 
 Or using clang:
 
 ```bash
-clang++ -std=c++17 -I src src/main.cpp src/telemetry/TelemetryGenerator.cpp -o f1-telemetry -pthread
+clang++ -std=c++17 -I src \
+  src/main.cpp \
+  src/telemetry/TelemetryGenerator.cpp \
+  src/strategy/RaceSimulator.cpp \
+  src/strategy/StrategyAnalyzer.cpp \
+  -o f1-telemetry -pthread
 ```
 
 ## Usage
@@ -59,6 +73,12 @@ clang++ -std=c++17 -I src src/main.cpp src/telemetry/TelemetryGenerator.cpp -o f
    ```bash
    ./f1-telemetry
    ```
+
+2. **(Optional) Run optimal strategy analysis**:
+   - When prompted, type `y`
+   - Enter driver indices (comma-separated, no spaces), e.g. `4,6,1`
+   - The program prints the chosen pit lap per selected driver
+   - Then it prints the full list of strategies that will be used and waits for **Enter** before starting the race
 
 2. **View the live race**: The terminal displays a beautiful, color-coded leaderboard:
    ```
@@ -81,7 +101,7 @@ clang++ -std=c++17 -I src src/main.cpp src/telemetry/TelemetryGenerator.cpp -o f
    - Purple "[IN PITS]" indicator during pit stops
    - Real-time updates showing all 20 drivers
 
-3. **Stop the simulation**: Press Enter to gracefully shutdown all threads
+3. **Race end**: The simulation runs until the leader completes the configured number of laps, then prints the winner.
 
 ## Project Structure
 
@@ -148,7 +168,6 @@ The default configuration includes the full 2025 F1 grid with 20 drivers across 
 
 ### Thread Safety & Synchronization
 - **Condition Variables**: Ring buffer uses `std::condition_variable` for efficient blocking
-  - `cv_not_full_`: Producer waits when buffer is full (instead of busy-waiting)
   - `cv_not_empty_`: Consumer waits when buffer is empty (instead of busy-waiting)
   - Eliminates CPU spinning and reduces power consumption
 - **Mutex Protection**: `std::mutex` with `std::unique_lock` for thread-safe operations
@@ -176,18 +195,13 @@ The default configuration includes the full 2025 F1 grid with 20 drivers across 
 The ring buffer implementation uses condition variables to eliminate busy-waiting:
 
 ```cpp
-// Producer waits efficiently when buffer is full
-cv_not_full_.wait(lock, [this]() {
-    return next_head != tail_ || shutdown_;
-});
-
 // Consumer waits efficiently when buffer is empty
 cv_not_empty_.wait(lock, [this]() { 
     return head_ != tail_ || shutdown_;
 });
 ```
 
-This ensures threads sleep when waiting, reducing CPU usage and improving system efficiency.
+The consumer sleeps when the buffer is empty, reducing CPU usage and improving system efficiency.
 
 ### Driver Performance Model
 Driver consistency directly impacts speed:
@@ -200,6 +214,13 @@ Each driver has a unique pit stop threshold:
 - Tire management experts (0.95): Pit at ~90% wear
 - Rookies (0.58): Pit at ~70% wear (more cautious)
 - Risk-takers: Pit slightly earlier, conservative drivers later
+
+### Optimal Strategy Analysis (how it works)
+When enabled at startup, the program can compute an “optimal” pit lap for a subset of drivers and feed those pit laps into the live telemetry generator.
+
+- **Candidate laps**: `StrategyAnalyzer::PIT_LAPS_TO_TEST` defines a small set of laps to evaluate (e.g. 12, 15, 18, ...).
+- **Parallel evaluation**: For a given driver, the analyzer launches multiple simulations concurrently using `std::async(std::launch::async, ...)` and collects results with `std::future<float>`.
+- **Selection**: The lap with the lowest simulated finish time is chosen and applied to the live race as a single planned pit stop for that driver.
 
 ## Future Enhancements
 

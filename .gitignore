@@ -10,6 +10,7 @@
 *.dll
 f1-telemetry
 f1_telemetry
+f1-test
 
 # CMake
 CMakeCache.txt

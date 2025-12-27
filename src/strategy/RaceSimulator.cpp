@@ -11,12 +11,11 @@ RaceSimulator::RaceSimulator(
     states_.resize(drivers.size());
     for(auto &s : states_) {
         s.lap = 0;
-        s.sector = 0;
+        s.sector = 1;
         s.tire_wear = 0.0f;
         s.distance_in_lap = 0.0f;
         s.total_time_seconds = 0.0f;
         s.has_pitted = false;
-        s.is_on_pit = false;
     }
 }
 
@@ -44,36 +43,38 @@ void RaceSimulator::updateDriverState(uint32_t driver_id, uint32_t target_driver
 
     if (shouldPit(driver_id, target_driver_id, forced_pit_lap)) {
         state.has_pitted = true;
-        state.is_on_pit = true;
-        state.total_time_seconds += (2.0f + (1.0f - car.reliability) * 1.0f);;
+        // Instant pit stop in strategy sim - add time penalty but don't stay in pit
+        state.total_time_seconds += (2.0f + (1.0f - car.reliability) * 1.0f);
         state.tire_wear = 0.0f;
         return;
     }
 
-    float speed = 0.0f;
-    if (!state.is_on_pit) {
-        float driver_skill = 0.80f + driver.consistency * 0.25f;
-        speed = 220.0f * car.engine_power * driver_skill * (1.0f - state.tire_wear * 0.4f);
-    }
+    // Calculate speed based on driver skill, car performance, and tire wear
+    float driver_skill = 0.80f + driver.consistency * 0.25f;
+    float speed = 220.0f * car.engine_power * driver_skill * (1.0f - state.tire_wear * 0.4f);
 
-    if (!state.is_on_pit) {
-        state.tire_wear += 0.0005f * track_.tire_wear_factor * driver.aggression;
-        if (state.tire_wear > 1.0f) state.tire_wear = 1.0f;
-    }
+    // Update distance and lap/sector progression
+    // distance in km; speed is km/h and tick is 20ms
+    // simulation runs ~120x faster than real time for reasonable race duration
+    constexpr float sim_speed_multiplier = 120.0f;
+    const float delta_distance_km = speed * (tick_seconds / 3600.0f) * sim_speed_multiplier;
 
-    if (!state.is_on_pit) {
-        state.distance_in_lap += speed * 0.005f;
+    // Tire wear scales with distance traveled (not per tick), matching TelemetryGenerator.
+    const float wear_per_lap = 0.05f * driver.aggression * track_.tire_wear_factor;
+    state.tire_wear += (delta_distance_km / track_.lap_length_km) * wear_per_lap;
+    if (state.tire_wear > 1.0f) state.tire_wear = 1.0f;
 
-        float sector_length = track_.lap_length_km / track_.sectors;
+    state.distance_in_lap += delta_distance_km;
 
-        if (state.distance_in_lap >= sector_length) {
-            state.distance_in_lap = state.distance_in_lap - sector_length;
-            state.sector++;
+    float sector_length = track_.lap_length_km / track_.sectors;
 
-            if (state.sector > track_.sectors) {
-                state.sector = 1;
-                state.lap++;
-            }
+    while (state.distance_in_lap >= sector_length) {
+        state.distance_in_lap -= sector_length;
+        state.sector++;
+
+        if (state.sector > track_.sectors) {
+            state.sector = 1;
+            state.lap++;
         }
     }
 
@@ -89,12 +90,11 @@ void RaceSimulator::simulateTick(uint32_t target_driver_id, uint32_t pit_lap) {
 float RaceSimulator::simulateRace(uint32_t target_driver_id, uint32_t pit_lap) {
     for(auto &s : states_){
         s.lap = 0;
-        s.sector = 0;
+        s.sector = 1;
         s.tire_wear = 0.0f;
         s.distance_in_lap = 0.0f;
         s.total_time_seconds = 0.0f;
         s.has_pitted = false;
-        s.is_on_pit = false;
     }
 
     while(states_[target_driver_id].lap < total_laps_) {

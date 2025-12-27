@@ -61,6 +61,7 @@ struct DriverState {
     float distance_in_lap;
 
     bool is_on_pit;
+    bool has_pitted;  // Prevent re-triggering a planned/optimal pit stop
     uint64_t pit_stop_start_time_ns;
     uint64_t pit_stop_end_time_ns;
 };

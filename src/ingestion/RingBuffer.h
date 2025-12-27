@@ -30,21 +30,21 @@ private:
 
 template<typename T>
 RingBuffer<T>::RingBuffer(size_t capacity) 
-    : buffer_(capacity), head_(0), tail_(0), capacity_(capacity), shutdown_(false) {}
+    : buffer_(capacity), capacity_(capacity), shutdown_(false), head_(0), tail_(0) {}
 
 template<typename T>
 bool RingBuffer<T>::push(const T& item) {
     std::unique_lock<std::mutex> lock(mutex_);  
-    
-    cv_not_full_.wait(lock, [this]() {
-        size_t next_head = (head_ + 1) % capacity_;
-        return next_head != tail_ || shutdown_; 
-    });
 
     if(shutdown_) return false;
 
+    size_t next_head = (head_ + 1) % capacity_;
+    if(next_head == tail_) {
+        return false; // full, signal caller to drop or retry
+    }
+
     buffer_[head_] = item;
-    head_ = (head_ + 1) % capacity_;
+    head_ = next_head;
 
     lock.unlock();
     cv_not_empty_.notify_one();

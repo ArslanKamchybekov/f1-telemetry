@@ -12,12 +12,20 @@
 
 using namespace std;
 
-vector<uint32_t> parseDriverIds(const string& input){
+vector<uint32_t> parseDriverIds(const string& input, size_t max_id){
     vector<uint32_t> driver_ids;
     stringstream ss(input);
     string id;
     while(getline(ss, id, ',')){
-        driver_ids.push_back(stoi(id));
+        if(id.empty()) continue;
+        try {
+            int val = stoi(id);
+            if(val >= 0 && static_cast<size_t>(val) < max_id) {
+                driver_ids.push_back(static_cast<uint32_t>(val));
+            }
+        } catch(...) {
+            // Skip invalid entries
+        }
     }
     return driver_ids;
 }
@@ -30,7 +38,8 @@ int main(){
         .track_id = 1,
         .sectors = 3,
         .lap_length_km = 10.0f,
-        .tire_wear_factor = 10.0f,
+        // Baseline wear multiplier (1.0 ~= "normal"). Higher => earlier pit windows.
+        .tire_wear_factor = 1.0f,
         .overtaking_difficulty = 0.1f,
         .safety_car_probability = 0.01f,
     };
@@ -59,7 +68,11 @@ int main(){
         string input;
         getline(cin, input);
         
-        vector<uint32_t> driver_ids = parseDriverIds(input);
+        vector<uint32_t> driver_ids = parseDriverIds(input, drivers.size());
+        
+        if(driver_ids.empty()) {
+            cout << "No valid driver IDs entered. Skipping strategy analysis.\n";
+        } else {
         
         cout << "\nAnalyzing strategies (this may take 10-30 seconds)...\n";
         
@@ -79,6 +92,7 @@ int main(){
             optimal_strategies[result.driver_id] = result.optimal_pit_lap;
         }
         cout << "\n";
+        } // end else block for non-empty driver_ids
     }
 
     RingBuffer<TelemetryFrame> buffer(1024);
@@ -86,12 +100,27 @@ int main(){
 
     if(!optimal_strategies.empty()) {
         generator.setOptimalStrategies(optimal_strategies);
-        cout << "Optimal strategies set for the following drivers:\n";
-        for(const auto& strategy : optimal_strategies) {
-            cout << drivers[strategy.first].driver_id << " -> Pit lap " << strategy.second << "\n";
-        }
-        cout << "\n";
     }
+
+    // Print strategies that will be used, then start the race
+    cout << "\nRace strategies:\n";
+    cout << "================\n";
+    for (uint32_t i = 0; i < drivers.size(); i++) {
+        cout << drivers[i].driver_id << ": ";
+        auto it = optimal_strategies.find(i);
+        if (it != optimal_strategies.end()) {
+            cout << "Optimal pit lap " << it->second << "\n";
+        } else {
+            cout << "Wear-based pitting\n";
+        }
+    }
+    cout << "\nPress Enter to start race...\n";
+    cout.flush();
+    {
+        string start;
+        getline(cin, start);
+    }
+    cout << "\nStarting race...\n\n";
 
     thread producer([&]() {
         while(!done.load()){
@@ -129,6 +158,13 @@ int main(){
 
     thread consumer([&]() {
         vector<TelemetryFrame> latestFrames(drivers.size());
+        // Initialize with valid positions to avoid sorting issues on first frames
+        for(size_t i = 0; i < latestFrames.size(); i++) {
+            latestFrames[i].driver_id = static_cast<uint32_t>(i);
+            latestFrames[i].race_position = static_cast<uint8_t>(i + 1);
+            latestFrames[i].lap = 0;
+            latestFrames[i].sector = 1;
+        }
         
         while(!done.load()){
             TelemetryFrame frame;
@@ -137,7 +173,7 @@ int main(){
             }
             latestFrames[frame.driver_id] = frame;
             
-            static int frameCount = 0;
+            static size_t frameCount = 0;
             frameCount++;
             
             if(frameCount % drivers.size() == 0) {
@@ -184,7 +220,7 @@ int main(){
                     
                     string name = drivers[f.driver_id].driver_id;
                     cout << "\033[1m" << name << "\033[0m";
-                    for(int i = name.length(); i < 20; i++) cout << " ";
+                    for(size_t i = name.length(); i < 20; i++) cout << " ";
                     
                     int barLength = 10;
                     float progress = (f.sector - 1) / float(track.sectors);
@@ -218,7 +254,7 @@ int main(){
                 }
                 
                 cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-                cout << "\033[90mPress Enter to stop the race\033[0m\n";
+                cout << "\033[90mRace runs until finish\033[0m\n";
                 cout.flush();
             }
         }

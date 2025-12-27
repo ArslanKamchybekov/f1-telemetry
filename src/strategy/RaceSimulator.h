@@ -24,7 +24,6 @@ private:
         float distance_in_lap;
         float total_time_seconds;
         bool has_pitted;
-        bool is_on_pit;
     };
 
     TrackProfile track_;

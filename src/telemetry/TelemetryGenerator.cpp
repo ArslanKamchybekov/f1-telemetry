@@ -1,5 +1,6 @@
 
 #include "TelemetryGenerator.h"
+#include <algorithm>
 
 using namespace std;
 
@@ -13,17 +14,18 @@ TelemetryGenerator::TelemetryGenerator(
 
     for (auto &s : states_){
         s.lap = 0;
-        s.sector = 0;
+        s.sector = 1;
         s.tire_wear = 0.0f;
         s.distance_in_lap = 0.0f;
         s.is_on_pit = false;
+        s.has_pitted = false;
         s.pit_stop_start_time_ns = 0;
         s.pit_stop_end_time_ns = 0;
     }
 }
 
 vector<TelemetryFrame> TelemetryGenerator::next() {
-    constexpr uint64_t tick_ns = 20 * 1e6;
+    constexpr uint64_t tick_ns = 20'000'000ULL; // 20ms in nanoseconds
     current_time_ns_ += tick_ns;
 
     vector<TelemetryFrame> frames;
@@ -39,7 +41,10 @@ vector<TelemetryFrame> TelemetryGenerator::next() {
 }
 
 float TelemetryGenerator::getTotalDistance(uint32_t driver_id) const {
-    return states_[driver_id].distance_in_lap + states_[driver_id].lap * track_.lap_length_km;
+    const auto& s = states_[driver_id];
+    const float sector_length = track_.lap_length_km / track_.sectors;
+    const float sector_offset = (static_cast<float>(s.sector) - 1.0f) * sector_length;
+    return s.lap * track_.lap_length_km + sector_offset + s.distance_in_lap;
 }
 
 void TelemetryGenerator::calculatePositions(vector<TelemetryFrame>& frames) {
@@ -52,7 +57,7 @@ void TelemetryGenerator::calculatePositions(vector<TelemetryFrame>& frames) {
     });
     for(uint32_t i = 0; i < positions.size(); i++) {
         uint32_t driver_id = positions[i].first;
-        frames[driver_id].race_position = i + 1;
+        frames[driver_id].race_position = static_cast<uint8_t>(i + 1);
     }
 }
 
@@ -66,20 +71,22 @@ TelemetryFrame TelemetryGenerator::generateFrame(uint32_t i) {
     float pit_threshold = base_threshold + risk_adjustment;
 
     bool should_pit = false;
-    // Check if this driver has an optimal strategy
-    if (optimal_strategies_.find(i) != optimal_strategies_.end()) {
-        // optimal strategy condition
-        uint32_t optimal_pit_lap = optimal_strategies_[i];
-        should_pit = state.lap == optimal_pit_lap && !state.is_on_pit;
+    const bool has_optimal = (optimal_strategies_.find(i) != optimal_strategies_.end());
+
+    if (has_optimal) {
+        // If an optimal strategy is provided, follow it exactly (and only once).
+        const uint32_t optimal_pit_lap = optimal_strategies_[i];
+        should_pit = (state.lap == optimal_pit_lap) && !state.is_on_pit && !state.has_pitted;
     } else {
-        //  tire wear condition
-        should_pit = state.tire_wear > pit_threshold && !state.is_on_pit;
+        // Otherwise pit based on tire wear (can happen multiple times across the race).
+        should_pit = (state.tire_wear > pit_threshold) && !state.is_on_pit;
     }
 
     if (should_pit && !state.is_on_pit) {
         state.is_on_pit = true;
+        if (has_optimal) state.has_pitted = true; // consume the planned pit
         state.pit_stop_start_time_ns = current_time_ns_;
-        uint64_t pit_duration = (2.0f + (1.0f - car.reliability) * 1.0f) * 1e9;
+        uint64_t pit_duration = static_cast<uint64_t>((2.0f + (1.0f - car.reliability) * 1.0f) * 1e9);
         state.pit_stop_end_time_ns = current_time_ns_ + pit_duration;
     }
 
@@ -95,17 +102,22 @@ TelemetryFrame TelemetryGenerator::generateFrame(uint32_t i) {
     }
 
     if (!state.is_on_pit) {
-        state.tire_wear += 0.0005f * track_.tire_wear_factor * driver.aggression;
-        if (state.tire_wear > 1.0f) state.tire_wear = 1.0f;
-    }
+        constexpr float tick_seconds = 0.02f;
+        constexpr float sim_speed_multiplier = 120.0f;
+        const float delta_distance_km = speed * (tick_seconds / 3600.0f) * sim_speed_multiplier;
 
-    if (!state.is_on_pit) {
-        state.distance_in_lap += speed * 0.005f;
+        // Tire wear scales with distance traveled (not per tick), so pit timing stays stable if sim speed changes.
+        // Tuned so typical first stops fall roughly in the 15–25 lap range depending on driver traits and track.
+        const float wear_per_lap = 0.05f * driver.aggression * track_.tire_wear_factor; // 0..~0.05 per lap
+        state.tire_wear += (delta_distance_km / track_.lap_length_km) * wear_per_lap;
+        if (state.tire_wear > 1.0f) state.tire_wear = 1.0f;
+
+        state.distance_in_lap += delta_distance_km;
 
         float sector_length = track_.lap_length_km / track_.sectors;
 
-        if (state.distance_in_lap >= sector_length) {
-            state.distance_in_lap = state.distance_in_lap - sector_length;
+        while (state.distance_in_lap >= sector_length) {
+            state.distance_in_lap -= sector_length;
             state.sector++;
 
             if (state.sector > track_.sectors) {
@@ -124,6 +136,10 @@ TelemetryFrame TelemetryGenerator::generateFrame(uint32_t i) {
     frame.throttle = 1.0f;
     frame.brake = 0.0f;
     frame.tire_wear = state.tire_wear;
+    float base_temp = state.is_on_pit ? 60.0f : std::clamp(80.0f + speed * 0.05f, 60.0f, 120.0f);
+    for(int t = 0; t < 4; t++) {
+        frame.tire_temp_c[t] = base_temp;
+    }
 
     return frame;
 }
@@ -133,14 +149,14 @@ bool TelemetryGenerator::isRaceFinished() const {
     uint32_t leader_idx = 0;
     
     for(uint32_t i = 0; i < states_.size(); i++) {
-        float total_distance = states_[i].distance_in_lap + states_[i].lap * track_.lap_length_km;
+        float total_distance = getTotalDistance(i);
         if(total_distance > max_distance) {
             max_distance = total_distance;
             leader_idx = i;
         }
     }
     
-    return states_[leader_idx].lap > total_laps_;
+    return states_[leader_idx].lap >= total_laps_;
 }
 
 void TelemetryGenerator::setOptimalStrategies(const std::map<uint32_t, uint32_t>& strategies) {

@@ -15,6 +15,10 @@ A high-performance, multi-threaded Formula 1 telemetry data generator and proces
 - **Advanced Pit Stop Strategy**: Variable pit stop thresholds based on driver tire management and risk tolerance
 - **Optimal Strategy Analysis (Optional)**: Find a best pit lap for selected drivers and apply it to the live race
   - Uses parallel simulation via `std::async` + `std::future` to evaluate multiple candidate pit laps
+- **Track Limits Monitoring**: Realistic track limits violation detection with warnings and penalties
+  - Checks for violations at sector boundaries (not every frame) for realistic frequency
+  - Violation probability based on driver aggression, speed, and tire wear
+  - 3 warnings trigger a penalty flag
 - **Driver Skill Factor**: Consistency affects how much performance drivers can extract from their cars
 - **Track Configuration**: Configurable track profiles with sectors, lap length, and environmental factors
 
@@ -36,7 +40,8 @@ The system uses a producer-consumer architecture with a thread-safe ring buffer:
 - **RingBuffer**: Thread-safe circular buffer using condition variables (`std::condition_variable`) for efficient blocking instead of busy-waiting. Supports graceful shutdown mechanism.
 - **StrategyAnalyzer**: Optional pre-race strategy module that searches for an optimal pit lap for selected drivers.
 - **RaceSimulator**: Lightweight race simulation used by the strategy analyzer to evaluate pit lap candidates.
-- **Main Application**: Orchestrates strategy analysis (optional) and the producer/consumer threads, and renders the live race leaderboard.
+- **TrackLimitsMonitor**: Monitors track limits violations, checking at sector boundaries for realistic frequency. Tracks warnings and penalties per driver with thread-safe access.
+- **Main Application**: Orchestrates strategy analysis (optional), track limits monitoring, and the producer/consumer threads, and renders the live race leaderboard.
 
 ## Building
 
@@ -53,6 +58,7 @@ g++ -std=c++17 -I src \
   src/telemetry/TelemetryGenerator.cpp \
   src/strategy/RaceSimulator.cpp \
   src/strategy/StrategyAnalyzer.cpp \
+  src/race-control/TrackLimitsMonitor.cpp \
   -o f1-telemetry -pthread
 ```
 
@@ -64,6 +70,7 @@ clang++ -std=c++17 -I src \
   src/telemetry/TelemetryGenerator.cpp \
   src/strategy/RaceSimulator.cpp \
   src/strategy/StrategyAnalyzer.cpp \
+  src/race-control/TrackLimitsMonitor.cpp \
   -o f1-telemetry -pthread
 ```
 
@@ -114,6 +121,14 @@ f1-telemetry/
 │   ├── telemetry/
 │   │   ├── TelemetryGenerator.h    # Telemetry generation class interface
 │   │   └── TelemetryGenerator.cpp  # Telemetry generation implementation
+│   ├── strategy/
+│   │   ├── StrategyAnalyzer.h      # Strategy analysis interface
+│   │   ├── StrategyAnalyzer.cpp   # Strategy analysis implementation
+│   │   ├── RaceSimulator.h         # Race simulation interface
+│   │   └── RaceSimulator.cpp      # Race simulation implementation
+│   ├── race-control/
+│   │   ├── TrackLimitsMonitor.h    # Track limits monitoring interface
+│   │   └── TrackLimitsMonitor.cpp # Track limits monitoring implementation
 │   └── ingestion/
 │       └── RingBuffer.h            # Thread-safe ring buffer implementation
 └── README.md
@@ -216,11 +231,24 @@ Each driver has a unique pit stop threshold:
 - Risk-takers: Pit slightly earlier, conservative drivers later
 
 ### Optimal Strategy Analysis (how it works)
-When enabled at startup, the program can compute an “optimal” pit lap for a subset of drivers and feed those pit laps into the live telemetry generator.
+When enabled at startup, the program can compute an "optimal" pit lap for a subset of drivers and feed those pit laps into the live telemetry generator.
 
 - **Candidate laps**: `StrategyAnalyzer::PIT_LAPS_TO_TEST` defines a small set of laps to evaluate (e.g. 12, 15, 18, ...).
 - **Parallel evaluation**: For a given driver, the analyzer launches multiple simulations concurrently using `std::async(std::launch::async, ...)` and collects results with `std::future<float>`.
 - **Selection**: The lap with the lowest simulated finish time is chosen and applied to the live race as a single planned pit stop for that driver.
+
+### Track Limits Monitoring (how it works)
+The `TrackLimitsMonitor` processes telemetry frames to detect track limits violations with realistic frequency and consequences.
+
+- **Sector-based checking**: Violations are only checked at sector boundaries (not every frame), ensuring realistic frequency (approximately 3 checks per lap instead of 50 per second).
+- **Violation probability factors**:
+  - **Aggression**: `driver.aggression * 0.01` - More aggressive drivers push limits more often
+  - **Speed**: `0.005` if speed > 200 kph - Higher speeds increase violation risk
+  - **Tire wear**: `tire_wear * 0.01` if wear > 60% - Worn tires reduce control
+- **Penalty system**: 
+  - Each violation adds a warning and records the lap number
+  - After **3 warnings**, the driver receives a penalty flag (`has_penalty = true`)
+- **Thread safety**: Uses `std::mutex` to protect the violations map during concurrent access from producer and consumer threads
 
 ## Future Enhancements
 

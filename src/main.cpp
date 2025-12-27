@@ -2,6 +2,7 @@
 #include "telemetry/TelemetryGenerator.h"
 #include "strategy/StrategyAnalyzer.h"
 #include "data/season_data.h"
+#include "race-control/TrackLimitsMonitor.h"
 #include <thread>
 #include <chrono>
 #include <iostream>
@@ -97,6 +98,7 @@ int main(){
 
     RingBuffer<TelemetryFrame> buffer(1024);
     TelemetryGenerator generator(track, drivers, cars, total_laps);
+    TrackLimitsMonitor track_limits_monitor(track, drivers);
 
     if(!optimal_strategies.empty()) {
         generator.setOptimalStrategies(optimal_strategies);
@@ -168,9 +170,13 @@ int main(){
         
         while(!done.load()){
             TelemetryFrame frame;
+
             if(!buffer.pop(frame)) {
                 break;
             }
+
+            track_limits_monitor.processFrame(frame);
+
             latestFrames[frame.driver_id] = frame;
             
             static size_t frameCount = 0;
@@ -254,6 +260,26 @@ int main(){
                 }
                 
                 cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+                
+                cout << "\n⚠️  TRACK LIMITS VIOLATIONS:\n";
+                bool any_violations = false;
+                for(const auto& f : sortedFrames) {
+                    TrackLimitsState state = track_limits_monitor.getDriverState(f.driver_id);
+                    if(state.warnings > 0) {
+                        any_violations = true;
+                        cout << "   " << drivers[f.driver_id].driver_id << ": ";
+                        cout << state.warnings << " warning" << (state.warnings > 1 ? "s" : "");
+                        if(state.has_penalty) {
+                            cout << " \033[1;31m[5 SEC PENALTY]\033[0m";
+                        }
+                        cout << "\n";
+                    }
+                }
+
+                if(!any_violations) {
+                    cout << "   \033[90mNone\033[0m\n";
+                }
+                
                 cout << "\033[90mRace runs until finish\033[0m\n";
                 cout.flush();
             }

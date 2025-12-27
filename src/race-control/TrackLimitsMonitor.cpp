@@ -18,22 +18,30 @@ TrackLimitsMonitor::TrackLimitsMonitor(
 }
 
 void TrackLimitsMonitor::processFrame(const TelemetryFrame &frame) {
-    const auto &driver = drivers_[frame.driver_id];
-    float aggression_factor = driver.aggression * 0.05f;
-    float speed_factor = (frame.speed_kph > 200.0f) ? 0.02f : 0.0f;
-    float tire_wear_factor = (frame.tire_wear > 0.6f) ? frame.tire_wear * 0.03f : 0.0f;
-    float violation_probability = aggression_factor + speed_factor + tire_wear_factor;
+    // Only check for violations at sector boundaries (not every frame)
+    static std::map<uint32_t, uint8_t> last_sector;
+    
+    if (last_sector[frame.driver_id] != frame.sector) {
+        last_sector[frame.driver_id] = frame.sector;
+        
+        const auto &driver = drivers_[frame.driver_id];
+        float aggression_factor = driver.aggression * 0.01f;
+        float speed_factor = (frame.speed_kph > 200.0f) ? 0.005f : 0.0f;
+        float tire_wear_factor = (frame.tire_wear > 0.6f) ? frame.tire_wear * 0.01f : 0.0f;
+        float violation_probability = aggression_factor + speed_factor + tire_wear_factor;
 
-    if(dis(gen) < violation_probability) {
-        unique_lock<mutex> lock(mutex_);
-        auto &state = driver_violations_[frame.driver_id];
-        state.warnings += 1;
-        state.violation_laps.push_back(frame.lap);
+        if(dis(gen) < violation_probability) {
+            unique_lock<mutex> lock(mutex_);
+            auto &state = driver_violations_[frame.driver_id];
+            state.warnings += 1;
+            state.violation_laps.push_back(frame.lap);
 
-        if(state.warnings >= 3) {
-            state.has_penalty = true;
+            if(state.warnings >= 3) {
+                state.has_penalty = true;
+            }
+
+            lock.unlock();
         }
-        lock.unlock();
     }
 }
 

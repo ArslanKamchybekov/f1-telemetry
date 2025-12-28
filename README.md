@@ -18,7 +18,8 @@ A high-performance, multi-threaded Formula 1 telemetry data generator and proces
 - **Track Limits Monitoring**: Realistic track limits violation detection with warnings and penalties
   - Checks for violations at sector boundaries (not every frame) for realistic frequency
   - Violation probability based on driver aggression, speed, and tire wear
-  - 3 warnings trigger a penalty flag
+  - 3 warnings trigger a penalty flag and issue a time penalty
+- **Penalty Enforcer**: Tracks issued penalties and enforces them during pit stops using simulation time
 - **Driver Skill Factor**: Consistency affects how much performance drivers can extract from their cars
 - **Track Configuration**: Configurable track profiles with sectors, lap length, and environmental factors
 
@@ -41,6 +42,7 @@ The system uses a producer-consumer architecture with a thread-safe ring buffer:
 - **StrategyAnalyzer**: Optional pre-race strategy module that searches for an optimal pit lap for selected drivers.
 - **RaceSimulator**: Lightweight race simulation used by the strategy analyzer to evaluate pit lap candidates.
 - **TrackLimitsMonitor**: Monitors track limits violations, checking at sector boundaries for realistic frequency. Tracks warnings and penalties per driver with thread-safe access.
+- **PenaltyEnforcer**: Thread-safe penalty state machine. Stores penalties per driver and is consulted by the telemetry generator to add penalty time during pit stops.
 - **Main Application**: Orchestrates strategy analysis (optional), track limits monitoring, and the producer/consumer threads, and renders the live race leaderboard.
 
 ## Building
@@ -59,6 +61,7 @@ g++ -std=c++17 -I src \
   src/strategy/RaceSimulator.cpp \
   src/strategy/StrategyAnalyzer.cpp \
   src/race-control/TrackLimitsMonitor.cpp \
+  src/race-control/PenaltyEnforcer.cpp \
   -o f1-telemetry -pthread
 ```
 
@@ -71,6 +74,7 @@ clang++ -std=c++17 -I src \
   src/strategy/RaceSimulator.cpp \
   src/strategy/StrategyAnalyzer.cpp \
   src/race-control/TrackLimitsMonitor.cpp \
+  src/race-control/PenaltyEnforcer.cpp \
   -o f1-telemetry -pthread
 ```
 
@@ -129,6 +133,8 @@ f1-telemetry/
 │   ├── race-control/
 │   │   ├── TrackLimitsMonitor.h    # Track limits monitoring interface
 │   │   └── TrackLimitsMonitor.cpp # Track limits monitoring implementation
+│   │   ├── PenaltyEnforcer.h       # Penalty state machine interface
+│   │   └── PenaltyEnforcer.cpp     # Penalty state machine implementation
 │   └── ingestion/
 │       └── RingBuffer.h            # Thread-safe ring buffer implementation
 └── README.md
@@ -247,8 +253,15 @@ The `TrackLimitsMonitor` processes telemetry frames to detect track limits viola
   - **Tire wear**: `tire_wear * 0.01` if wear > 60% - Worn tires reduce control
 - **Penalty system**: 
   - Each violation adds a warning and records the lap number
-  - After **3 warnings**, the driver receives a penalty flag (`has_penalty = true`)
+  - After **3 warnings**, the driver receives a penalty flag (`has_penalty = true`) and a time penalty is issued via `PenaltyEnforcer`
 - **Thread safety**: Uses `std::mutex` to protect the violations map during concurrent access from producer and consumer threads
+
+### Penalty Enforcer (how it works)
+The `PenaltyEnforcer` is a thread-safe penalty state machine keyed by `driver_id`.
+
+- **Issuing**: `issuePenalty(driver_id, seconds)` marks the penalty as `PENDING` and stores the duration.
+- **Serving**: The live `TelemetryGenerator` consults `shouldServePenalty(driver_id, current_time_ns)` when a driver enters the pits; if `PENDING`, it switches to `SERVING` and timestamps the start using **simulation time (ns)**.
+- **Completion**: `isPenaltyComplete(driver_id, current_time_ns)` only becomes true after the simulated duration elapses, then transitions to `SERVED`.
 
 ## Future Enhancements
 

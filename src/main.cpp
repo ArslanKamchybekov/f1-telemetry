@@ -3,6 +3,7 @@
 #include "strategy/StrategyAnalyzer.h"
 #include "data/season_data.h"
 #include "race-control/TrackLimitsMonitor.h"
+#include "race-control/PenaltyEnforcer.h"
 #include <thread>
 #include <chrono>
 #include <iostream>
@@ -96,9 +97,11 @@ int main(){
         } // end else block for non-empty driver_ids
     }
 
+    auto penalty_enforcer = std::make_shared<PenaltyEnforcer>(drivers);
+
     RingBuffer<TelemetryFrame> buffer(1024);
-    TelemetryGenerator generator(track, drivers, cars, total_laps);
-    TrackLimitsMonitor track_limits_monitor(track, drivers);
+    TelemetryGenerator generator(track, drivers, cars, total_laps, penalty_enforcer);
+    TrackLimitsMonitor track_limits_monitor(track, drivers, penalty_enforcer);
 
     if(!optimal_strategies.empty()) {
         generator.setOptimalStrategies(optimal_strategies);
@@ -265,12 +268,20 @@ int main(){
                 bool any_violations = false;
                 for(const auto& f : sortedFrames) {
                     TrackLimitsState state = track_limits_monitor.getDriverState(f.driver_id);
+                    DriverPenaltyInfo penalty = penalty_enforcer->getPenaltyInfo(f.driver_id);
+                    
                     if(state.warnings > 0) {
                         any_violations = true;
                         cout << "   " << drivers[f.driver_id].driver_id << ": ";
                         cout << state.warnings << " warning" << (state.warnings > 1 ? "s" : "");
-                        if(state.has_penalty) {
-                            cout << " \033[1;31m[5 SEC PENALTY]\033[0m";
+                        
+                        // Add penalty status
+                        if(penalty.state == PenaltyState::PENDING) {
+                            cout << " \033[1;33m[PENALTY PENDING]\033[0m";
+                        } else if(penalty.state == PenaltyState::SERVING) {
+                            cout << " \033[1;31m[SERVING PENALTY]\033[0m";
+                        } else if(penalty.state == PenaltyState::SERVED) {
+                            cout << " \033[1;32m[PENALTY SERVED]\033[0m";
                         }
                         cout << "\n";
                     }

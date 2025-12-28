@@ -8,8 +8,9 @@ TelemetryGenerator::TelemetryGenerator(
     const TrackProfile& track,
     const vector<DriverProfile>& drivers,
     const vector<CarProfile>& cars,
-    uint32_t total_laps
-) : track_(track), drivers_(drivers), cars_(cars), total_laps_(total_laps), current_time_ns_(0) {
+    uint32_t total_laps,
+    std::shared_ptr<PenaltyEnforcer> penalty_enforcer
+) : track_(track), drivers_(drivers), cars_(cars), total_laps_(total_laps), current_time_ns_(0), penalty_enforcer_(penalty_enforcer) {
     states_.resize(drivers.size());
 
     for (auto &s : states_){
@@ -87,10 +88,17 @@ TelemetryFrame TelemetryGenerator::generateFrame(uint32_t i) {
         if (has_optimal) state.has_pitted = true; // consume the planned pit
         state.pit_stop_start_time_ns = current_time_ns_;
         uint64_t pit_duration = static_cast<uint64_t>((2.0f + (1.0f - car.reliability) * 1.0f) * 1e9);
+
+        if (penalty_enforcer_ && penalty_enforcer_->shouldServePenalty(i, current_time_ns_)) {
+            // Add the configured penalty duration (in simulation time) to this pit stop.
+            pit_duration += penalty_enforcer_->getPenaltyInfo(i).penalty_duration_ns;
+        }
         state.pit_stop_end_time_ns = current_time_ns_ + pit_duration;
     }
 
-    if (state.is_on_pit && current_time_ns_ >= state.pit_stop_end_time_ns) {
+    if (state.is_on_pit &&
+        current_time_ns_ >= state.pit_stop_end_time_ns &&
+        (!penalty_enforcer_ || penalty_enforcer_->isPenaltyComplete(i, current_time_ns_))) {
         state.is_on_pit = false;
         state.tire_wear = 0.0f;
     }
@@ -136,7 +144,7 @@ TelemetryFrame TelemetryGenerator::generateFrame(uint32_t i) {
     frame.throttle = 1.0f;
     frame.brake = 0.0f;
     frame.tire_wear = state.tire_wear;
-    float base_temp = state.is_on_pit ? 60.0f : std::clamp(80.0f + speed * 0.05f, 60.0f, 120.0f);
+    float base_temp = state.is_on_pit ? 60.0f : clamp(80.0f + speed * 0.05f, 60.0f, 120.0f);
     for(int t = 0; t < 4; t++) {
         frame.tire_temp_c[t] = base_temp;
     }

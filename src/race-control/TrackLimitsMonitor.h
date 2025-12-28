@@ -4,6 +4,7 @@
 #include <vector>
 #include <map>
 #include <mutex>
+#include "PenaltyEnforcer.h"
 
 struct TrackLimitsState {
     uint32_t warnings;
@@ -13,7 +14,7 @@ struct TrackLimitsState {
 
 class TrackLimitsMonitor{
 public:
-    TrackLimitsMonitor(const TrackProfile& track, const std::vector<DriverProfile>& drivers);
+    TrackLimitsMonitor(const TrackProfile& track, const std::vector<DriverProfile>& drivers, std::shared_ptr<PenaltyEnforcer> penalty_enforcer);
 
     void processFrame(const TelemetryFrame& frame);
 
@@ -22,6 +23,7 @@ public:
 private:
     TrackProfile track_;
     std::vector<DriverProfile> drivers_;
+    std::shared_ptr<PenaltyEnforcer> penalty_enforcer_;
 
     std::map<uint32_t, TrackLimitsState> driver_violations_;
     mutable std::mutex mutex_;

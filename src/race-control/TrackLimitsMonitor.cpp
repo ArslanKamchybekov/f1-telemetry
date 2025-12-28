@@ -10,8 +10,9 @@ std::uniform_real_distribution<float> dis(0.0f, 1.0f);
 
 TrackLimitsMonitor::TrackLimitsMonitor(
     const TrackProfile &track,
-    const vector<DriverProfile> &drivers
-) : track_(track), drivers_(drivers) {
+    const vector<DriverProfile> &drivers,
+    std::shared_ptr<PenaltyEnforcer> penalty_enforcer
+) : track_(track), drivers_(drivers), penalty_enforcer_(penalty_enforcer) {
     for(uint32_t i = 0; i < drivers.size(); i++) {
         driver_violations_.insert({i, TrackLimitsState{0, false, {}}});
     }
@@ -36,8 +37,9 @@ void TrackLimitsMonitor::processFrame(const TelemetryFrame &frame) {
             state.warnings += 1;
             state.violation_laps.push_back(frame.lap);
 
-            if(state.warnings >= 3) {
+            if(state.warnings == 3 && !state.has_penalty) {
                 state.has_penalty = true;
+                penalty_enforcer_->issuePenalty(frame.driver_id, 5);
             }
 
             lock.unlock();

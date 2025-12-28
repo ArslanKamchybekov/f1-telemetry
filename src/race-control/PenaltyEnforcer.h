@@ -2,7 +2,7 @@
 
 #include "../common/types.h"
 #include <map>
-#include <chrono>
+#include <cstdint>
 #include <mutex>
 
 enum class PenaltyState {
@@ -15,7 +15,8 @@ enum class PenaltyState {
 struct DriverPenaltyInfo {
     PenaltyState state;
     uint32_t penalty_seconds;
-    std::chrono::steady_clock::time_point penalty_start;
+    uint64_t penalty_start_time_ns;
+    uint64_t penalty_duration_ns;
 
 };
 
@@ -24,9 +25,9 @@ public:
     PenaltyEnforcer(const std::vector<DriverProfile>& drivers);
 
     void issuePenalty(uint32_t driver_id, uint32_t seconds);
-    bool shouldServePenalty(uint32_t driver_id);
-    bool isPenaltyComplete(uint32_t driver_id);
-    DriverPenaltyInfo getPenaltyInfo(uint32_t driver_id);
+    bool shouldServePenalty(uint32_t driver_id, uint64_t current_time_ns);
+    bool isPenaltyComplete(uint32_t driver_id, uint64_t current_time_ns);
+    DriverPenaltyInfo getPenaltyInfo(uint32_t driver_id) const;
     
 private:
     std::map<uint32_t, DriverPenaltyInfo> penalties_;

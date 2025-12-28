@@ -4,10 +4,11 @@
 #include <map>
 #include <cstdint>
 #include "../common/types.h"
+#include "../race-control/PenaltyEnforcer.h"
 
 class TelemetryGenerator {
 public:
-    TelemetryGenerator(const TrackProfile& track, const std::vector<DriverProfile>& drivers, const std::vector<CarProfile>& cars, uint32_t total_laps);
+    TelemetryGenerator(const TrackProfile& track, const std::vector<DriverProfile>& drivers, const std::vector<CarProfile>& cars, uint32_t total_laps, std::shared_ptr<PenaltyEnforcer> penalty_enforcer);
 
     std::vector<TelemetryFrame> next();
     bool isRaceFinished() const;
@@ -25,6 +26,8 @@ private:
     std::map<uint32_t, uint32_t> optimal_strategies_;
 
     std::vector<DriverState> states_;
+
+    std::shared_ptr<PenaltyEnforcer> penalty_enforcer_;
 
     TelemetryFrame generateFrame(uint32_t driver_id);
 

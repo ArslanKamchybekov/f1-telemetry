@@ -268,9 +268,7 @@ The `PenaltyEnforcer` is a thread-safe penalty state machine keyed by `driver_id
 Potential improvements:
 - [ ] DRS (Drag Reduction System) modeling
 - [ ] Safety car deployment
-- [ ] Virtual Safety Car (VSC)
 - [ ] Multi-track support with track-specific characteristics
 - [ ] Qualifying sessions with grid positions
 - [ ] Race incidents and DNFs (crashes, mechanical failures)
-- [ ] Strategy variations (one-stop vs two-stop races)
 - [ ] Yellow flag periods affecting speed
